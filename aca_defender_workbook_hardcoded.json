@@ -1,0 +1,47 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## \ud83d\udee1 Azure Container Apps + Defender for Containers\nThis workbook visualizes alerts, vulnerabilities, and runtime threats for Azure Container Apps protected by Microsoft Defender for Containers."
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "chartType": "table",
+        "query": {
+          "resourceType": "microsoft.operationalinsights/workspaces",
+          "resource": "/subscriptions/e15e403f-7ca0-4fa6-9c9b-e780f664db5b/resourceGroups/aca-defender-demo-rg/providers/Microsoft.OperationalInsights/workspaces/aca-demo-law",
+          "query": "\nSecurityAlert\n| where ResourceType == \"containerapp\"\n| project TimeGenerated, AlertName, Severity, CompromisedEntity, Description\n| order by TimeGenerated desc\n"
+        },
+        "title": "\ud83d\udd14 ACA Security Alerts"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "chartType": "barchart",
+        "query": {
+          "resourceType": "microsoft.operationalinsights/workspaces",
+          "resource": "/subscriptions/e15e403f-7ca0-4fa6-9c9b-e780f664db5b/resourceGroups/aca-defender-demo-rg/providers/Microsoft.OperationalInsights/workspaces/aca-demo-law",
+          "query": "\nSecurityRecommendation\n| where ResourceType == \"containerapp\"\n| summarize Count = count() by RecommendationDisplayName\n| top 5 by Count\n"
+        },
+        "title": "\u26a0\ufe0f Top ACA Security Recommendations"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "chartType": "timechart",
+        "query": {
+          "resourceType": "microsoft.operationalinsights/workspaces",
+          "resource": "/subscriptions/e15e403f-7ca0-4fa6-9c9b-e780f664db5b/resourceGroups/aca-defender-demo-rg/providers/Microsoft.OperationalInsights/workspaces/aca-demo-law",
+          "query": "\nSecurityAlert\n| where ResourceType == \"containerapp\"\n| summarize AlertCount = count() by bin(TimeGenerated, 1d), Severity\n"
+        },
+        "title": "\ud83d\udcc8 Alert Trends Over Time"
+      }
+    }
+  ]
+}

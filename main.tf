@@ -1,5 +1,20 @@
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = ">= 3.50.0"
+    }
+  }
+  required_version = ">= 1.4"
+}
+
 provider "azurerm" {
   features {}
+  subscription_id = "e15e403f-7ca0-4fa6-9c9b-e780f664db5b"
+}
+
+variable "location" {
+  default = "eastus"
 }
 
 resource "azurerm_resource_group" "demo_rg" {
@@ -34,36 +49,14 @@ resource "azurerm_container_app" "juice_shop" {
   name                         = "owasp-juice-shop"
   container_app_environment_id = azurerm_container_app_environment.aca_env.id
   resource_group_name          = azurerm_resource_group.demo_rg.name
-  location                     = azurerm_resource_group.demo_rg.location
   revision_mode                = "Single"
-
-  registry {
-    server   = azurerm_container_registry.acr.login_server
-    username = azurerm_container_registry.acr.admin_username
-    password = azurerm_container_registry.acr.admin_password
-  }
 
   template {
     container {
       name   = "juice"
-      image  = "${azurerm_container_registry.acr.login_server}/juice-shop:latest"
+      image  = "bkimminich/juice-shop:latest"
       cpu    = 0.5
       memory = "1.0Gi"
-
-      probes {
-        type     = "Liveness"
-        http_get {
-          path = "/"
-          port = 3000
-        }
-        initial_delay_seconds = 10
-        period_seconds        = 30
-      }
-    }
-
-    scale {
-      min_replicas = 1
-      max_replicas = 3
     }
   }
 
@@ -71,6 +64,7 @@ resource "azurerm_container_app" "juice_shop" {
     external_enabled = true
     target_port      = 3000
     transport        = "auto"
+
     traffic_weight {
       percentage      = 100
       latest_revision = true
@@ -78,80 +72,28 @@ resource "azurerm_container_app" "juice_shop" {
   }
 }
 
-resource "azurerm_monitor_diagnostic_setting" "aca_diag" {
-  name               = "aca-log-forwarding"
-  target_resource_id = azurerm_container_app.juice_shop.id
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.law.id
-
-  log {
-    category = "ContainerAppConsoleLogs"
-    enabled  = true
-
-    retention_policy {
-      enabled = false
-    }
-  }
-
-  metric {
-    category = "AllMetrics"
-    enabled  = true
-
-    retention_policy {
-      enabled = false
-    }
-  }
+resource "azurerm_application_insights_workbook" "container_vuln_workbook" {
+  name                = "f7b9f3ab-7d58-4a12-8b4b-aca111111001"
+  resource_group_name = azurerm_resource_group.demo_rg.name
+  location            = azurerm_resource_group.demo_rg.location
+  display_name        = "Container Image Vulnerability Overview"
+  category            = "workbook"
+  data_json           = file("${path.module}/container_image_vulnerability_overview.json")
 }
 
-# Defender for Containers (Agentless + ACR scanning)
-resource "azurerm_security_center_subscription_pricing" "aca_defender" {
-  tier          = "Standard"
-  resource_type = "AppServices"
+resource "azurerm_application_insights_workbook" "aca_runtime_workbook" {
+  name                = "c3d2a9b0-19f2-4ad7-90fe-aca111111002"
+  resource_group_name = azurerm_resource_group.demo_rg.name
+  location            = azurerm_resource_group.demo_rg.location
+  display_name        = "ACA Runtime Threat Detection"
+  category            = "workbook"
+  data_json           = file("${path.module}/aca_runtime_threat_detection.json")
 }
 
-resource "azurerm_security_center_subscription_pricing" "acr_defender" {
-  tier          = "Standard"
-  resource_type = "ContainerRegistry"
+output "aca_url" {
+  value = azurerm_container_app.juice_shop.latest_revision_fqdn
 }
 
-resource "azurerm_security_center_auto_provisioning" "autoprov" {
-  auto_provision = "On"
-}
-
-# ✅ Sample Azure Policy: Only allow images from ACR
-resource "azurerm_policy_definition" "deny_external_images" {
-  name         = "deny-external-container-images"
-  policy_type  = "Custom"
-  mode         = "Indexed"
-  display_name = "Deny external container images"
-  description  = "Only allow container images from approved Azure Container Registries."
-
-  policy_rule = jsonencode({
-    "if": {
-      "allOf": [
-        {
-          "field": "type",
-          "equals": "Microsoft.App/containerApps"
-        },
-        {
-          "field": "Microsoft.App/containerApps/template/containers/image",
-          "notLike": "${azurerm_container_registry.acr.login_server}/*"
-        }
-      ]
-    },
-    "then": {
-      "effect": "deny"
-    }
-  })
-
-  metadata = jsonencode({
-    "category" : "Container Apps"
-  })
-}
-
-resource "azurerm_policy_assignment" "enforce_internal_images" {
-  name                 = "only-internal-images"
-  scope                = azurerm_resource_group.demo_rg.id
-  policy_definition_id = azurerm_policy_definition.deny_external_images.id
-  description          = "Only allow images from internal Azure Container Registry"
-  display_name         = "Restrict external container images"
+output "acr_login_server" {
+  value = azurerm_container_registry.acr.login_server
 }
